@@ -1,0 +1,4 @@
+dotenv
+google-genai
+agno
+ddgs
