@@ -1,3 +1,4 @@
+import json
 import streamlit as st
 
 from agent import create_research_agent
@@ -8,6 +9,7 @@ st.set_page_config(
     page_icon="🔎",
     layout="wide",
 )
+
 
 # -----------------------------
 # Sidebar — API Key
@@ -46,7 +48,9 @@ st.title("🔎 Research Agent")
 
 if not st.session_state.get("api_key_submitted", False):
 
-    st.info("Enter your Gemini API key in the sidebar to start researching.")
+    st.info(
+        "Enter your Gemini API key in the sidebar to start researching."
+    )
 
 else:
 
@@ -66,15 +70,52 @@ else:
     if research:
 
         if not topic.strip():
+
             st.warning("Please enter a research topic.")
 
         else:
+
+            sources = {}
+
             agent = create_research_agent(
                 st.session_state["api_key"]
             )
 
             with st.spinner("Researching..."):
+
                 response = agent.run(topic)
+
+                # Collect sources from every web search
+                for tool in response.tools:
+
+                    if tool.tool_name == "web_search":
+
+                        
+                        search_results = json.loads(tool.result)
+
+                        for result in search_results:
+
+                            sources[result["href"]] = [
+                                result["title"],
+                                result["body"],
+                            ]
+
+            # -----------------------------
+            # Research Report
+            # -----------------------------
 
             st.markdown("## Research Report")
             st.markdown(response.content)
+
+            # -----------------------------
+            # Sources
+            # -----------------------------
+
+            st.markdown("## Sources")
+
+            for url, source_info in sources.items():
+
+                title, body = source_info
+
+                st.markdown(f"### [{title}]({url})")
+                st.write(body)
