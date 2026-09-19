@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Teaching Agent</title>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0f1a; --surface: #141828; --card: #1e2438; --border: #2a3050;
+    --primary: #6366f1; --primary-dark: #4f52cc; --accent: #22d3ee;
+    --success: #10b981; --warn: #f59e0b; --danger: #ef4444;
+    --text: #e2e8f0; --muted: #64748b;
+    --user-bubble: #1e3a5f; --agent-bubble: #1e2e1e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* ── SETUP ─────────────────────────────────────── */
+  #setup-screen { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; gap: 32px; padding: 24px; }
+  .setup-logo { font-size: 48px; }
+  .setup-title { font-size: 2rem; font-weight: 700; background: linear-gradient(135deg, var(--primary), var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .setup-subtitle { color: var(--muted); font-size: 1rem; margin-top: -24px; }
+  .setup-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 32px; width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 20px; }
+  .form-group label { display: block; margin-bottom: 8px; font-size: 0.85rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+  .form-group select { width: 100%; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 1rem; outline: none; }
+  .form-group select:focus { border-color: var(--primary); }
+  .form-group select option { background: var(--surface); }
+  #start-btn { padding: 14px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); border: none; border-radius: 10px; color: white; font-size: 1rem; font-weight: 600; cursor: pointer; transition: opacity 0.2s; }
+  #start-btn:hover { opacity: 0.9; }
+  #setup-error { color: var(--danger); font-size: 0.85rem; text-align: center; display: none; }
+
+  /* ── SESSION ────────────────────────────────────── */
+  #session-screen { display: none; flex-direction: column; height: 100vh; }
+
+  .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 20px; height: 56px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+  .header-logo { font-size: 1.3rem; font-weight: 700; background: linear-gradient(135deg, var(--primary), var(--accent)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .tag { background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 3px 12px; font-size: 0.78rem; color: var(--muted); }
+  .tag.active { border-color: var(--primary); color: var(--primary); }
+  .header-spacer { flex: 1; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .status-dot.live { background: var(--success); box-shadow: 0 0 6px var(--success); }
+  .status-dot.paused-dot { background: var(--warn); box-shadow: 0 0 6px var(--warn); }
+  #end-btn { padding: 6px 16px; background: transparent; border: 1px solid var(--danger); border-radius: 6px; color: var(--danger); cursor: pointer; font-size: 0.82rem; }
+  #end-btn:hover { background: var(--danger); color: white; }
+
+  .main-layout { display: flex; flex: 1; overflow: hidden; }
+
+  /* Left */
+  .left-panel { width: 200px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; padding: 16px; gap: 16px; }
+  .panel-title { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin-bottom: 4px; }
+  #solve-status { display: none; }
+  #solve-status.active { display: block; }
+  .solve-card { background: rgba(245,158,11,0.1); border: 1px solid rgba(245,158,11,0.3); border-radius: 10px; padding: 12px; text-align: center; }
+  #solve-timer { font-size: 1.6rem; font-weight: 700; color: var(--warn); font-variant-numeric: tabular-nums; margin: 4px 0; }
+  .solve-label { font-size: 0.75rem; color: var(--warn); font-weight: 600; }
+  .quick-actions { display: flex; flex-direction: column; gap: 6px; }
+  .qa-btn { padding: 8px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 7px; color: var(--text); font-size: 0.78rem; cursor: pointer; text-align: left; transition: border-color 0.15s; }
+  .qa-btn:hover { border-color: var(--primary); color: var(--primary); }
+  #mic-level { width: 60px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  #mic-bar { height: 100%; width: 0%; background: var(--success); border-radius: 2px; transition: width 0.05s; }
+
+  /* Center */
+  .center-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+  #transcript { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; scroll-behavior: smooth; }
+  #transcript::-webkit-scrollbar { width: 4px; }
+  #transcript::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .bubble-row { display: flex; gap: 10px; align-items: flex-start; }
+  .bubble-row.agent { flex-direction: row; }
+  .bubble-row.user { flex-direction: row-reverse; }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; margin-top: 2px; }
+  .avatar.agent { background: linear-gradient(135deg, var(--primary), var(--accent)); }
+  .avatar.user { background: var(--user-bubble); border: 1px solid var(--border); }
+  .bubble { max-width: 72%; padding: 10px 14px; border-radius: 12px; font-size: 0.9rem; line-height: 1.5; word-wrap: break-word; }
+  .bubble.agent { background: var(--agent-bubble); border: 1px solid var(--border); border-top-left-radius: 3px; }
+  .bubble.user { background: var(--user-bubble); border: 1px solid rgba(99,102,241,0.3); border-top-right-radius: 3px; }
+  .bubble-time { font-size: 0.68rem; color: var(--muted); margin-top: 4px; }
+  .typing-indicator { display: flex; gap: 4px; padding: 4px 0; }
+  .typing-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: typing 1.2s infinite; }
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typing { 0%,60%,100% { opacity: 0.3; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-4px); } }
+  .system-msg { text-align: center; font-size: 0.75rem; color: var(--muted); padding: 4px 0; }
+  .text-input-row { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; background: var(--surface); }
+  #text-input { flex: 1; padding: 10px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 0.9rem; outline: none; }
+  #text-input:focus { border-color: var(--primary); }
+  #send-text-btn { padding: 10px 18px; background: var(--primary); border: none; border-radius: 8px; color: white; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
+
+  /* Right */
+  .right-panel { width: 240px; flex-shrink: 0; background: var(--surface); border-left: 1px solid var(--border); display: flex; flex-direction: column; padding: 16px; gap: 16px; overflow-y: auto; }
+  #local-video { width: 100%; aspect-ratio: 4/3; background: #000; border-radius: 8px; border: 1px solid var(--border); object-fit: cover; display: none; }
+  .video-placeholder { width: 100%; aspect-ratio: 4/3; background: var(--card); border-radius: 8px; border: 1px dashed var(--border); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: var(--muted); font-size: 0.8rem; }
+  .video-placeholder span { font-size: 28px; }
+  #doc-preview { width: 100%; border-radius: 8px; border: 1px solid var(--border); overflow: hidden; display: none; }
+  #doc-preview img { width: 100%; display: block; }
+  .doc-placeholder { width: 100%; aspect-ratio: 3/4; background: var(--card); border-radius: 8px; border: 1px dashed var(--border); display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: var(--muted); font-size: 0.8rem; cursor: pointer; }
+  .doc-placeholder:hover { border-color: var(--primary); color: var(--primary); }
+  .doc-placeholder span { font-size: 28px; }
+
+  /* Toolbar */
+  .toolbar { background: var(--surface); border-top: 1px solid var(--border); padding: 12px 20px; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .tool-btn { padding: 10px 16px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; font-size: 0.85rem; display: flex; align-items: center; gap: 6px; transition: all 0.15s; white-space: nowrap; }
+  .tool-btn:hover { border-color: var(--primary); color: var(--primary); }
+  .tool-btn.active { background: rgba(99,102,241,0.15); border-color: var(--primary); color: var(--primary); }
+  .toolbar-spacer { flex: 1; }
+  #pause-btn { padding: 10px 22px; border-radius: 10px; border: none; background: linear-gradient(135deg, #f59e0b, #d97706); color: white; cursor: pointer; font-size: 0.9rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  #pause-btn.solving { background: linear-gradient(135deg, #10b981, #059669); animation: pulse-green 1.5s infinite; }
+  @keyframes pulse-green { 0%,100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); } 50% { box-shadow: 0 0 0 8px rgba(16,185,129,0); } }
+
+  /* Solving overlay */
+  #solving-overlay { display: none; position: absolute; inset: 0; background: rgba(12,15,26,0.85); backdrop-filter: blur(4px); align-items: center; justify-content: center; flex-direction: column; gap: 16px; z-index: 10; }
+  #solving-overlay.show { display: flex; }
+  #overlay-timer { font-size: 3rem; font-weight: 800; color: var(--warn); font-variant-numeric: tabular-nums; }
+  #done-btn { padding: 14px 36px; background: linear-gradient(135deg, var(--success), #059669); border: none; border-radius: 12px; color: white; font-size: 1rem; font-weight: 700; cursor: pointer; }
+
+  /* Speaking badge */
+  .speaking-badge { display: none; align-items: center; gap: 4px; font-size: 0.75rem; color: var(--accent); }
+  .speaking-badge.show { display: flex; }
+  .wave { width: 3px; height: 12px; background: var(--accent); border-radius: 2px; animation: wave 0.8s infinite; }
+  .wave:nth-child(2) { animation-delay: 0.15s; height: 18px; }
+  .wave:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes wave { 0%,100% { transform: scaleY(0.4); } 50% { transform: scaleY(1); } }
+
+  /* ═══════════════════════════════════════════════════
+     WHITEBOARD MODAL — slides up from bottom
+  ═══════════════════════════════════════════════════ */
+  #wb-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    backdrop-filter: blur(3px);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  #wb-overlay.show { display: flex; }
+
+  #wb-modal {
+    background: #12271a;
+    border: 3px solid #2d5a38;
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.8);
+    display: flex;
+    flex-direction: column;
+    max-width: 92vw;
+    max-height: 90vh;
+    animation: wb-pop 0.2s ease-out;
+  }
+  @keyframes wb-pop { from { transform: scale(0.92); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+  .wb-header {
+    background: #1d3d26;
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 2px solid #2d5a38;
+    flex-shrink: 0;
+  }
+  .wb-dot { width: 10px; height: 10px; border-radius: 50%; background: #4ade80; box-shadow: 0 0 6px #4ade80; flex-shrink: 0; }
+  #wb-title { font-family: 'Caveat', cursive; font-size: 1.15rem; font-weight: 600; color: #a8d8a8; flex: 1; }
+  #wb-close { padding: 4px 12px; background: transparent; border: 1px solid #3d6b45; border-radius: 6px; color: #6b9a72; font-size: 0.8rem; cursor: pointer; }
+  #wb-close:hover { background: rgba(255,255,255,0.07); color: #a8d8a8; }
+
+  #wb-canvas {
+    display: block;
+    /* canvas bg set in JS */
+  }
+</style>
+</head>
+<body>
+
+<!-- ══ SETUP ══════════════════════════════════════════════ -->
+<div id="setup-screen">
+  <div class="setup-logo">📚</div>
+  <div class="setup-title">Teaching Agent</div>
+  <div class="setup-subtitle">Voice · Video · Live Tutoring powered by Gemini Live</div>
+  <div class="setup-card">
+    <div class="form-group">
+      <label>Your Class / Level</label>
+      <select id="class-select">
+        <option value="Elementary School (Grade 1–5)">Elementary School (Grade 1–5)</option>
+        <option value="Middle School (Grade 6–8)">Middle School (Grade 6–8)</option>
+        <option value="High School (Grade 9–12)" selected>High School (Grade 9–12)</option>
+        <option value="College / University">College / University</option>
+        <option value="Professional / Adult Learning">Professional / Adult Learning</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Subject</label>
+      <select id="subject-select">
+        <option value="Mathematics" selected>Mathematics</option>
+        <option value="Physics">Physics</option>
+        <option value="Chemistry">Chemistry</option>
+        <option value="Biology">Biology</option>
+        <option value="Computer Science">Computer Science</option>
+        <option value="English / Literature">English / Literature</option>
+        <option value="History">History</option>
+        <option value="Geography">Geography</option>
+        <option value="Economics">Economics</option>
+        <option value="Art &amp; Music">Art &amp; Music</option>
+      </select>
+    </div>
+    <button id="start-btn" onclick="startSession()">🎓 Start Learning Session</button>
+    <div id="setup-error"></div>
+  </div>
+</div>
+
+<!-- ══ SESSION ════════════════════════════════════════════ -->
+<div id="session-screen">
+
+  <div class="header">
+    <div class="header-logo">📚 Teaching Agent</div>
+    <span class="tag active" id="hdr-class">—</span>
+    <span class="tag active" id="hdr-subject">—</span>
+    <div class="header-spacer"></div>
+    <div class="speaking-badge" id="agent-speaking">
+      <div class="wave"></div><div class="wave"></div><div class="wave"></div>
+      <span>Teacher speaking</span>
+    </div>
+    <div class="status-dot" id="conn-dot"></div>
+    <span style="font-size:0.75rem;color:var(--muted)" id="conn-label">Connecting…</span>
+    <button id="end-btn" onclick="endSession()">✕ End</button>
+  </div>
+
+  <div class="main-layout">
+
+    <!-- Left -->
+    <div class="left-panel">
+      <div id="solve-status">
+        <div class="panel-title">Mode</div>
+        <div class="solve-card">
+          <div style="font-size:24px;margin-bottom:6px">✏️</div>
+          <div class="solve-label">SOLVING</div>
+          <div id="solve-timer">0:00</div>
+        </div>
+      </div>
+      <div>
+        <div class="panel-title">Quick Actions</div>
+        <div class="quick-actions">
+          <button class="qa-btn" onclick="quickAction('explain_again')">🔄 Explain again</button>
+          <button class="qa-btn" onclick="quickAction('example')">💡 New example</button>
+          <button class="qa-btn" onclick="quickAction('practice')">📝 Practice problem</button>
+          <button class="qa-btn" onclick="quickAction('ask_me')">❓ Quiz me</button>
+          <button class="qa-btn" onclick="quickAction('stuck')">🆘 I'm stuck</button>
+          <button class="qa-btn" onclick="sendHint()">🪄 Hint please</button>
+          <button class="qa-btn" onclick="askToDraw()">🖊️ Draw it for me</button>
+        </div>
+      </div>
+      <div>
+        <div class="panel-title" style="margin-bottom:8px">Mic Level</div>
+        <div id="mic-level"><div id="mic-bar"></div></div>
+      </div>
+    </div>
+
+    <!-- Center -->
+    <div class="center-panel">
+      <div id="solving-overlay">
+        <div style="font-size:56px">✏️</div>
+        <div style="font-size:1.6rem;font-weight:700;color:var(--warn)">Solving Mode</div>
+        <div style="color:var(--muted);font-size:0.9rem">Teacher is waiting patiently for you…</div>
+        <div id="overlay-timer">0:00</div>
+        <button id="done-btn" onclick="resumeSession()">✅ Done Solving — Show My Work</button>
+      </div>
+
+      <div id="transcript">
+        <div class="system-msg">🔌 Connecting to server…</div>
+      </div>
+
+      <div class="text-input-row">
+        <input id="text-input" type="text" placeholder="Type a message or question…" onkeydown="if(event.key==='Enter') sendText()">
+        <button id="send-text-btn" onclick="sendText()">Send</button>
+      </div>
+    </div>
+
+    <!-- Right -->
+    <div class="right-panel">
+      <div>
+        <div class="panel-title">Your Camera</div>
+        <video id="local-video" autoplay muted playsinline></video>
+        <div class="video-placeholder" id="video-placeholder"><span>📷</span><span>Camera off</span></div>
+      </div>
+      <div>
+        <div class="panel-title">Your Work / Document</div>
+        <div id="doc-placeholder" class="doc-placeholder" onclick="document.getElementById('file-input').click()">
+          <span>📄</span><span>Click to share paper</span>
+        </div>
+        <div id="doc-preview"><img id="doc-img" src="" alt="Shared document"></div>
+        <input id="file-input" type="file" accept="image/*,application/pdf" style="display:none" onchange="handleFile(event)">
+      </div>
+    </div>
+
+  </div><!-- main-layout -->
+
+  <div class="toolbar">
+    <button class="tool-btn" id="mic-btn" onclick="toggleMic()">🎙️ Mic Off</button>
+    <button class="tool-btn" id="cam-btn" onclick="toggleCamera()">📷 Camera Off</button>
+    <button class="tool-btn" onclick="document.getElementById('file-input').click()">📎 Share Work</button>
+    <div class="toolbar-spacer"></div>
+    <button id="pause-btn" onclick="toggleSolving()">✏️ I'm Solving →</button>
+  </div>
+
+</div><!-- session-screen -->
+
+<!-- ══ WHITEBOARD MODAL ══════════════════════════════════ -->
+<div id="wb-overlay" onclick="if(event.target===this) closeBoard()">
+  <div id="wb-modal">
+    <div class="wb-header">
+      <div class="wb-dot"></div>
+      <span id="wb-title">Diagram</span>
+      <button id="wb-close" onclick="closeBoard()">✕ Close</button>
+    </div>
+    <canvas id="wb-canvas"></canvas>
+  </div>
+</div>
+
+
+<script>
+// ═══════════════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════════════
+let ws = null, isMicOn = false, isCameraOn = false, isSolving = false;
+let solveStart = null, solveTimerID = null;
+let captureCtx = null, captureStream = null, captureSource = null;
+let micAnalyser = null, micLevelTimer = null;
+let playCtx = null, nextPlayTime = 0;
+let videoStream = null, videoFrameTimer = null;
+
+// Agent bubble — direct DOM reference (no ID, no collision)
+let agentBubbleEl = null;
+let agentBuffer = '';
+let agentBubbleTimer = null;
+
+// ═══════════════════════════════════════════════════════
+// Session
+// ═══════════════════════════════════════════════════════
+function startSession() {
+  const cls = document.getElementById('class-select').value;
+  const sub = document.getElementById('subject-select').value;
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('session-screen').style.display = 'flex';
+  document.getElementById('hdr-class').textContent = cls;
+  document.getElementById('hdr-subject').textContent = sub;
+  connectWebSocket(cls, sub);
+}
+
+function endSession() {
+  if (ws) { ws.close(); ws = null; }
+  stopMic(); stopCamera();
+  clearInterval(solveTimerID);
+  document.getElementById('session-screen').style.display = 'none';
+  document.getElementById('setup-screen').style.display = 'flex';
+}
+
+function connectWebSocket(cls, sub) {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onopen = () => { ws.send(JSON.stringify({ type: 'config', class: cls, subject: sub })); setConnStatus('connecting'); };
+  ws.onmessage = (ev) => { try { handleServerMessage(JSON.parse(ev.data)); } catch(e) { console.error(e); } };
+  ws.onerror = () => setConnStatus('offline');
+  ws.onclose = () => { setConnStatus('offline'); ws = null; };
+}
+
+function handleServerMessage(msg) {
+  switch (msg.type) {
+    case 'connected':
+      setConnStatus('online');
+      addSystemMsg(`✅ Connected — ${msg.class} · ${msg.subject}`);
+      if (!isMicOn) startMic();
+      break;
+    case 'audio':
+      if (!isSolving) playAudioChunk(msg.data);
+      setAgentSpeaking(true);
+      break;
+    case 'transcript':
+      addBubble(msg.speaker, msg.text);
+      if (msg.speaker === 'agent') setAgentSpeaking(true);
+      break;
+    case 'turn_complete':
+      setAgentSpeaking(false);
+      // Seal the current agent bubble — next message starts a fresh one
+      agentBubbleEl = null;
+      agentBuffer = '';
+      clearTimeout(agentBubbleTimer);
+      break;
+    case 'interrupted':
+      agentBubbleEl = null; agentBuffer = '';
+      break;
+    case 'board':
+      renderBoard(msg);
+      break;
+    case 'error':
+      addSystemMsg('⚠️ ' + msg.message);
+      setConnStatus('offline');
+      break;
+  }
+}
+
+function sendMsg(obj) {
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
+}
+
+// ═══════════════════════════════════════════════════════
+// Status helpers
+// ═══════════════════════════════════════════════════════
+function setConnStatus(state) {
+  const dot = document.getElementById('conn-dot');
+  const lbl = document.getElementById('conn-label');
+  dot.className = 'status-dot';
+  if (state === 'online') { dot.classList.add('live'); lbl.textContent = 'Live'; }
+  else if (state === 'connecting') { lbl.textContent = 'Connecting…'; }
+  else if (state === 'paused') { dot.classList.add('paused-dot'); lbl.textContent = 'Paused'; }
+  else { lbl.textContent = 'Offline'; }
+}
+
+let agentSpeakingTimer = null;
+function setAgentSpeaking(on) {
+  const badge = document.getElementById('agent-speaking');
+  clearTimeout(agentSpeakingTimer);
+  if (on) { badge.classList.add('show'); agentSpeakingTimer = setTimeout(() => badge.classList.remove('show'), 3000); }
+  else badge.classList.remove('show');
+}
+
+// ═══════════════════════════════════════════════════════
+// Transcript
+// ═══════════════════════════════════════════════════════
+function addBubble(speaker, text) {
+  const el = document.getElementById('transcript');
+
+  if (speaker === 'agent') {
+    agentBuffer += (agentBuffer ? ' ' : '') + text;
+    clearTimeout(agentBubbleTimer);
+
+    if (!agentBubbleEl) {
+      // Build element entirely without using a hardcoded ID
+      const avatar = document.createElement('div');
+      avatar.className = 'avatar agent';
+      avatar.textContent = '🎓';
+
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble agent';
+
+      const time = document.createElement('div');
+      time.className = 'bubble-time';
+      time.textContent = now();
+
+      const inner = document.createElement('div');
+      inner.appendChild(bubble);
+      inner.appendChild(time);
+
+      const row = document.createElement('div');
+      row.className = 'bubble-row agent';
+      row.appendChild(avatar);
+      row.appendChild(inner);
+
+      el.appendChild(row);
+      agentBubbleEl = bubble; // direct reference — never changes
+    }
+
+    agentBubbleEl.textContent = agentBuffer;
+    agentBubbleTimer = setTimeout(() => { agentBubbleEl = null; agentBuffer = ''; }, 2000);
+
+  } else {
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar user';
+    avatar.textContent = '🧑‍🎓';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble user';
+    bubble.textContent = text;
+
+    const time = document.createElement('div');
+    time.className = 'bubble-time';
+    time.style.textAlign = 'right';
+    time.textContent = now();
+
+    const inner = document.createElement('div');
+    inner.appendChild(bubble);
+    inner.appendChild(time);
+
+    const row = document.createElement('div');
+    row.className = 'bubble-row user';
+    row.appendChild(avatar);
+    row.appendChild(inner);
+
+    el.appendChild(row);
+  }
+
+  el.scrollTop = el.scrollHeight;
+}
+
+function addSystemMsg(text) {
+  const el = document.getElementById('transcript');
+  const d = document.createElement('div');
+  d.className = 'system-msg'; d.textContent = text;
+  el.appendChild(d); el.scrollTop = el.scrollHeight;
+}
+
+function now() { return new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' }); }
+
+// ═══════════════════════════════════════════════════════
+// ╔══════════════════════════════════════════════════════╗
+// ║  WHITEBOARD — Canvas renderer                       ║
+// ╚══════════════════════════════════════════════════════╝
+// Coordinate space: 0-100 for both x and y (0,0 = top-left)
+// Canvas is 480×480 px  ➜  1 unit = 4.8 px
+// ═══════════════════════════════════════════════════════
+const WB_SIZE = 480; // canvas px (square)
+const SCALE = WB_SIZE / 100; // px per coordinate unit
+
+// Chalk palette
+const CHALK = {
+  white:  'rgba(240,228,198,0.92)',
+  green:  '#4ade80',
+  yellow: '#fde68a',
+  blue:   '#93c5fd',
+  red:    '#fca5a5',
+  orange: '#fdba74',
+  purple: '#c4b5fd',
+  grid:   'rgba(255,255,255,0.06)',
+};
+
+function chalkColor(c) {
+  if (!c) return CHALK.white;
+  const map = { white: CHALK.white, green: CHALK.green, yellow: CHALK.yellow,
+                blue: CHALK.blue, red: CHALK.red, orange: CHALK.orange, purple: CHALK.purple };
+  return map[c.toLowerCase()] || c;
+}
+
+function renderBoard(data) {
+  const overlay = document.getElementById('wb-overlay');
+  const canvas  = document.getElementById('wb-canvas');
+  const ctx     = canvas.getContext('2d');
+
+  canvas.width  = WB_SIZE;
+  canvas.height = WB_SIZE;
+  canvas.style.width  = Math.min(WB_SIZE, window.innerWidth - 48) + 'px';
+  canvas.style.height = Math.min(WB_SIZE, window.innerWidth - 48) + 'px';
+
+  // Chalkboard background
+  ctx.fillStyle = '#152a1e';
+  ctx.fillRect(0, 0, WB_SIZE, WB_SIZE);
+
+  // Subtle ruled lines
+  ctx.strokeStyle = CHALK.grid;
+  ctx.lineWidth = 1;
+  for (let y = 10; y < 100; y += 10) {
+    ctx.beginPath(); ctx.moveTo(0, y * SCALE); ctx.lineTo(WB_SIZE, y * SCALE); ctx.stroke();
+  }
+
+  document.getElementById('wb-title').textContent = data.title || 'Diagram';
+
+  for (const shape of (data.shapes || [])) {
+    drawShape(ctx, shape);
+  }
+
+  overlay.classList.add('show');
+  addSystemMsg('🖊️ Board: ' + (data.title || 'Diagram'));
+}
+
+function closeBoard() {
+  document.getElementById('wb-overlay').classList.remove('show');
+}
+
+function S(v) { return (v ?? 0) * SCALE; } // coordinate → pixels
+
+function drawShape(ctx, s) {
+  ctx.save();
+  ctx.strokeStyle = chalkColor(s.color);
+  ctx.fillStyle   = s.fill && s.fill !== 'none' ? chalkColor(s.fill) : 'transparent';
+  ctx.lineWidth   = (s.thickness ?? 2);
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+  if (s.dashed) ctx.setLineDash([6, 4]); else ctx.setLineDash([]);
+
+  switch (s.type) {
+
+    case 'line': {
+      ctx.beginPath();
+      ctx.moveTo(S(s.x1), S(s.y1));
+      ctx.lineTo(S(s.x2), S(s.y2));
+      ctx.stroke();
+      if (s.label) chalkLabel(ctx, (S(s.x1)+S(s.x2))/2 + 4, (S(s.y1)+S(s.y2))/2 - 6, s.label, s.color);
+      break;
+    }
+
+    case 'arrow': {
+      drawArrow(ctx, S(s.x1), S(s.y1), S(s.x2), S(s.y2), ctx.strokeStyle);
+      if (s.label) chalkLabel(ctx, (S(s.x1)+S(s.x2))/2 + 4, (S(s.y1)+S(s.y2))/2 - 6, s.label, s.color);
+      break;
+    }
+
+    case 'triangle': {
+      ctx.beginPath();
+      ctx.moveTo(S(s.x1), S(s.y1));
+      ctx.lineTo(S(s.x2), S(s.y2));
+      ctx.lineTo(S(s.x3), S(s.y3));
+      ctx.closePath();
+      if (s.fill && s.fill !== 'none') { ctx.fillStyle = chalkColor(s.fill); ctx.fill(); }
+      ctx.stroke();
+      if (s.label1) chalkLabel(ctx, S(s.x1)-14, S(s.y1)-6,  s.label1, s.color, true);
+      if (s.label2) chalkLabel(ctx, S(s.x2)+6,  S(s.y2)+4,  s.label2, s.color, true);
+      if (s.label3) chalkLabel(ctx, S(s.x3)+6,  S(s.y3)-6,  s.label3, s.color, true);
+      if (s.label)  chalkLabel(ctx, (S(s.x1)+S(s.x2)+S(s.x3))/3, (S(s.y1)+S(s.y2)+S(s.y3))/3, s.label, s.color);
+      break;
+    }
+
+    case 'circle': {
+      const cx = s.x != null ? S(s.x) : S(50);
+      const cy = s.y != null ? S(s.y) : S(50);
+      const r  = S(s.r ?? 20);
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      if (s.fill && s.fill !== 'none') { ctx.fillStyle = chalkColor(s.fill); ctx.fill(); }
+      ctx.stroke();
+      if (s.label) chalkLabel(ctx, cx + r + 4, cy, s.label, s.color);
+      break;
+    }
+
+    case 'rectangle': {
+      const x = S(s.x ?? 20), y = S(s.y ?? 20);
+      const w = S(s.width ?? 30), h = S(s.height ?? 20);
+      ctx.beginPath(); ctx.rect(x, y, w, h);
+      if (s.fill && s.fill !== 'none') { ctx.fillStyle = chalkColor(s.fill); ctx.fill(); }
+      ctx.stroke();
+      if (s.label) chalkLabel(ctx, x + w/2, y + h/2 + 5, s.label, s.color);
+      break;
+    }
+
+    case 'point': {
+      ctx.beginPath();
+      ctx.arc(S(s.x), S(s.y), 4, 0, Math.PI * 2);
+      ctx.fillStyle = chalkColor(s.color);
+      ctx.fill();
+      if (s.label) chalkLabel(ctx, S(s.x) + 8, S(s.y) - 8, s.label, s.color, true);
+      break;
+    }
+
+    case 'text': {
+      ctx.fillStyle = chalkColor(s.color);
+      const sz = s.size ?? 16;
+      ctx.font = `${s.bold ? 'bold ' : ''}${sz}px 'Caveat', cursive`;
+      ctx.fillText(s.text || '', S(s.x), S(s.y));
+      break;
+    }
+
+    case 'axes': {
+      // Draw x and y axes through centre (50,50)
+      ctx.save();
+      ctx.strokeStyle = 'rgba(100,200,120,0.55)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([]);
+      // x-axis
+      ctx.beginPath(); ctx.moveTo(S(2), S(50)); ctx.lineTo(S(98), S(50)); ctx.stroke();
+      // y-axis
+      ctx.beginPath(); ctx.moveTo(S(50), S(98)); ctx.lineTo(S(50), S(2)); ctx.stroke();
+      // Arrows
+      drawArrow(ctx, S(96), S(50), S(98), S(50), 'rgba(100,200,120,0.55)');
+      drawArrow(ctx, S(50), S(4),  S(50), S(2),  'rgba(100,200,120,0.55)');
+      // Labels
+      ctx.fillStyle = 'rgba(100,200,120,0.7)';
+      ctx.font = "14px 'Caveat', cursive";
+      ctx.fillText('x', S(99), S(49));
+      ctx.fillText('y', S(51), S(2));
+      ctx.fillText('O', S(50)+4, S(50)+16);
+      ctx.restore();
+      break;
+    }
+
+    case 'angle_mark': {
+      // Small right-angle square at (x,y)
+      const sz = S(s.size ?? 4);
+      ctx.beginPath();
+      ctx.moveTo(S(s.x) + sz, S(s.y));
+      ctx.lineTo(S(s.x) + sz, S(s.y) - sz);
+      ctx.lineTo(S(s.x), S(s.y) - sz);
+      ctx.stroke();
+      break;
+    }
+  }
+
+  ctx.restore();
+}
+
+function chalkLabel(ctx, x, y, text, color, bold = false) {
+  ctx.save();
+  ctx.font = `${bold ? 'bold ' : ''}15px 'Caveat', cursive`;
+  ctx.fillStyle = chalkColor(color) || CHALK.white;
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+function drawArrow(ctx, x1, y1, x2, y2, color) {
+  const headLen = 10;
+  const angle = Math.atan2(y2 - y1, x2 - x1);
+  ctx.save();
+  ctx.strokeStyle = color; ctx.fillStyle = color;
+  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x2, y2);
+  ctx.lineTo(x2 - headLen * Math.cos(angle - Math.PI/6), y2 - headLen * Math.sin(angle - Math.PI/6));
+  ctx.lineTo(x2 - headLen * Math.cos(angle + Math.PI/6), y2 - headLen * Math.sin(angle + Math.PI/6));
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
+function askToDraw() {
+  sendMsg({ type: 'text', text: '[Student request: please draw a diagram on the board to explain what you just said.]' });
+  addSystemMsg('🖊️ Asking teacher to draw…');
+}
+
+// ═══════════════════════════════════════════════════════
+// Mic
+// ═══════════════════════════════════════════════════════
+async function startMic() {
+  try {
+    captureStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount:1, echoCancellation:true, noiseSuppression:true, autoGainControl:true } });
+    captureCtx = new AudioContext();
+    captureSource = captureCtx.createMediaStreamSource(captureStream);
+    micAnalyser = captureCtx.createAnalyser(); micAnalyser.fftSize = 256;
+    captureSource.connect(micAnalyser);
+    const dataArr = new Uint8Array(micAnalyser.frequencyBinCount);
+    micLevelTimer = setInterval(() => {
+      micAnalyser.getByteFrequencyData(dataArr);
+      const avg = dataArr.reduce((a,b)=>a+b,0)/dataArr.length;
+      document.getElementById('mic-bar').style.width = Math.min(100, avg*1.8)+'%';
+    }, 80);
+    isMicOn = true;
+    document.getElementById('mic-btn').classList.add('active');
+    document.getElementById('mic-btn').textContent = '🎙️ Mic On';
+    addSystemMsg('🎙️ Mic active — speak now');
+    startSpeechRecognition();
+  } catch(err) {
+    addSystemMsg(err.name === 'NotAllowedError' ? '⛔ Mic permission denied' : '🎙️ Mic error: ' + err.message);
+  }
+}
+
+function stopMic() {
+  stopSpeechRecognition();
+  if (captureSource) { captureSource.disconnect(); captureSource = null; }
+  if (captureCtx) { captureCtx.close(); captureCtx = null; }
+  if (captureStream) { captureStream.getTracks().forEach(t=>t.stop()); captureStream = null; }
+  clearInterval(micLevelTimer);
+  document.getElementById('mic-bar').style.width = '0%';
+  isMicOn = false;
+  document.getElementById('mic-btn').classList.remove('active');
+  document.getElementById('mic-btn').textContent = '🎙️ Mic Off';
+}
+
+function toggleMic() { if (isMicOn) stopMic(); else startMic(); }
+
+let recognition = null, recognitionRunning = false, interimEl = null;
+
+function startSpeechRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { addSystemMsg('⚠️ Web Speech not supported — use Chrome'); return; }
+  function createSession() {
+    const r = new SR();
+    r.continuous = false; r.interimResults = true; r.lang = 'en-IN';
+    r.onresult = (event) => {
+      if (isSolving) return;
+      let interim = '', final = '';
+      for (let i = 0; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) final += t; else interim += t;
+      }
+      if (!interimEl) {
+        interimEl = document.createElement('div');
+        interimEl.style.cssText = 'color:#94a3b8;font-style:italic;text-align:right;padding:2px 20px;font-size:0.85rem;';
+        document.getElementById('transcript').appendChild(interimEl);
+      }
+      interimEl.textContent = '🎙️ ' + (interim || final);
+      document.getElementById('transcript').scrollTop = 99999;
+      if (final) {
+        if (interimEl) { interimEl.remove(); interimEl = null; }
+        const text = final.trim();
+        if (!text) return;
+        addBubble('user', text);
+        sendMsg({ type: 'speech_end', text });
+      }
+    };
+    r.onend = () => {
+      if (interimEl) { interimEl.remove(); interimEl = null; }
+      if (recognitionRunning && isMicOn && !isSolving) setTimeout(() => { if (recognitionRunning) createSession(); }, 300);
+    };
+    r.onerror = (e) => { if (e.error === 'no-speech' || e.error === 'aborted') return; console.warn('speech:', e.error); };
+    recognition = r; try { r.start(); } catch(e) {}
+  }
+  recognitionRunning = true; createSession();
+}
+
+function stopSpeechRecognition() {
+  recognitionRunning = false;
+  if (interimEl) { interimEl.remove(); interimEl = null; }
+  if (recognition) { try { recognition.abort(); } catch(e){} recognition = null; }
+}
+
+// ═══════════════════════════════════════════════════════
+// Audio playback
+// ═══════════════════════════════════════════════════════
+function ensurePlayCtx() {
+  if (!playCtx || playCtx.state === 'closed') { playCtx = new AudioContext({ sampleRate: 24000 }); nextPlayTime = 0; }
+  if (playCtx.state === 'suspended') playCtx.resume();
+}
+function playAudioChunk(b64) {
+  ensurePlayCtx();
+  try {
+    const bytes = base64ToArray(b64);
+    const int16 = new Int16Array(bytes.buffer);
+    const f32 = new Float32Array(int16.length);
+    for (let i = 0; i < int16.length; i++) f32[i] = int16[i] / 32768.0;
+    const buf = playCtx.createBuffer(1, f32.length, 24000);
+    buf.copyToChannel(f32, 0);
+    const src = playCtx.createBufferSource();
+    src.buffer = buf; src.connect(playCtx.destination);
+    const startAt = Math.max(playCtx.currentTime + 0.02, nextPlayTime);
+    src.start(startAt); nextPlayTime = startAt + buf.duration;
+  } catch(e) { console.warn('audio:', e); }
+}
+
+// ═══════════════════════════════════════════════════════
+// Camera
+// ═══════════════════════════════════════════════════════
+async function startCamera() {
+  try {
+    videoStream = await navigator.mediaDevices.getUserMedia({ video: { width:640, height:480 } });
+    const vid = document.getElementById('local-video');
+    vid.srcObject = videoStream; vid.style.display = 'block';
+    document.getElementById('video-placeholder').style.display = 'none';
+    isCameraOn = true;
+    document.getElementById('cam-btn').classList.add('active');
+    document.getElementById('cam-btn').textContent = '📷 Camera On';
+    const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 480;
+    const ctx2d = canvas.getContext('2d');
+    videoFrameTimer = setInterval(() => {
+      if (!isCameraOn || !ws) return;
+      ctx2d.drawImage(vid, 0, 0, 640, 480);
+      canvas.toBlob(blob => {
+        if (!blob) return;
+        const reader = new FileReader();
+        reader.onload = () => sendMsg({ type: 'video_frame', data: reader.result.split(',')[1] });
+        reader.readAsDataURL(blob);
+      }, 'image/jpeg', 0.7);
+    }, 1000);
+    sendMsg({ type: 'text', text: '[Camera is now ON. I can show you things via my camera.]' });
+  } catch(err) { addSystemMsg('Camera error: ' + err.message); }
+}
+function stopCamera() {
+  clearInterval(videoFrameTimer);
+  if (videoStream) { videoStream.getTracks().forEach(t=>t.stop()); videoStream = null; }
+  const vid = document.getElementById('local-video');
+  vid.srcObject = null; vid.style.display = 'none';
+  document.getElementById('video-placeholder').style.display = 'flex';
+  isCameraOn = false;
+  document.getElementById('cam-btn').classList.remove('active');
+  document.getElementById('cam-btn').textContent = '📷 Camera Off';
+}
+function toggleCamera() { if (isCameraOn) stopCamera(); else startCamera(); }
+
+// ═══════════════════════════════════════════════════════
+// Document / paper
+// ═══════════════════════════════════════════════════════
+function handleFile(event) {
+  const file = event.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const dataUrl = e.target.result; const mime = file.type || 'image/jpeg';
+    document.getElementById('doc-placeholder').style.display = 'none';
+    if (mime.startsWith('image/')) { document.getElementById('doc-img').src = dataUrl; document.getElementById('doc-preview').style.display = 'block'; }
+    sendMsg({ type: 'document', data: dataUrl.split(',')[1], mime_type: mime });
+    addSystemMsg('📎 Shared: ' + file.name);
+  };
+  reader.readAsDataURL(file); event.target.value = '';
+}
+
+// ═══════════════════════════════════════════════════════
+// Pause / Solve
+// ═══════════════════════════════════════════════════════
+function toggleSolving() { if (isSolving) resumeSession(); else pauseSession(); }
+function pauseSession() {
+  isSolving = true; stopSpeechRecognition(); solveStart = Date.now();
+  document.getElementById('solving-overlay').classList.add('show');
+  document.getElementById('solve-status').classList.add('active');
+  document.getElementById('pause-btn').textContent = '✅ Done Solving';
+  document.getElementById('pause-btn').classList.add('solving');
+  setConnStatus('paused'); sendMsg({ type: 'pause' });
+  solveTimerID = setInterval(updateSolveTimer, 1000); updateSolveTimer();
+}
+function resumeSession() {
+  isSolving = false; if (isMicOn) startSpeechRecognition(); clearInterval(solveTimerID);
+  document.getElementById('solving-overlay').classList.remove('show');
+  document.getElementById('solve-status').classList.remove('active');
+  document.getElementById('pause-btn').textContent = '✏️ I\'m Solving →';
+  document.getElementById('pause-btn').classList.remove('solving');
+  setConnStatus('online'); sendMsg({ type: 'resume' });
+  addSystemMsg('▶️ Resumed — Teacher is listening again');
+}
+function updateSolveTimer() {
+  const secs = Math.floor((Date.now() - solveStart) / 1000);
+  const label = `${Math.floor(secs/60)}:${String(secs%60).padStart(2,'0')}`;
+  document.getElementById('solve-timer').textContent = label;
+  document.getElementById('overlay-timer').textContent = label;
+}
+
+// ═══════════════════════════════════════════════════════
+// Quick actions & text
+// ═══════════════════════════════════════════════════════
+function sendText() {
+  const input = document.getElementById('text-input'); const text = input.value.trim();
+  if (!text) return; sendMsg({ type: 'text', text }); addBubble('user', text); input.value = '';
+}
+function sendHint() { sendMsg({ type: 'hint' }); addSystemMsg('💡 Hint requested'); }
+function quickAction(action) {
+  sendMsg({ type: 'quick_action', action });
+  const labels = { explain_again:'🔄 Explain again', example:'💡 New example please', practice:'📝 Give me a practice problem', ask_me:'❓ Quiz me on this topic', stuck:'🆘 I\'m stuck, please help' };
+  addBubble('user', labels[action] || action);
+}
+
+// ═══════════════════════════════════════════════════════
+// Base64
+// ═══════════════════════════════════════════════════════
+function base64ToArray(b64) {
+  const binary = atob(b64); const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+</script>
+</body>
+</html>
